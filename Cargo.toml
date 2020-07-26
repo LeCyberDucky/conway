@@ -1,0 +1,8 @@
+[package]
+name = "conway"
+version = "0.1.0"
+authors = ["Andy <19520383+LeCyberDucky@users.noreply.github.com>"]
+edition = "2018"
+
+[dependencies]
+nannou = "0.13.1"

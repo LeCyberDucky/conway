@@ -1,0 +1,8 @@
+Generell: 
+- Physik nicht an Rendergeschwindigkeit (FPS) binden
+- - https://dewitters.com/dewitters-gameloop/
+- - https://stackoverflow.com/questions/15100348/does-dewitters-game-loop-assume-a-constant-ups
+
+TODO:
+1. Raster anzeigen
+2. Einzelne Rasterfelder verändern
