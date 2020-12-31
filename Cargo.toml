@@ -5,4 +5,10 @@ authors = ["Andy <19520383+LeCyberDucky@users.noreply.github.com>"]
 edition = "2018"
 
 [dependencies]
-nannou = "0.13.1"
+iced = { version = "0.2.0", features = ["image", "canvas", "tokio", "debug"] }
+rand = "0.8.0"
+rgb = { version = "0.8.25", features = [] }
+image = "0.23.12"
+tokio = { version = "0.3", features = ["sync"] }
+itertools = "0.9"
+rustc-hash = "1.1"

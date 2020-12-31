@@ -1,8 +1,8 @@
 //! This example showcases a simple native custom widget that draws a circle.
 mod circle {
     use iced_native::{
-        layout, Background, Color, Element, Hasher, Layout, Length,
-        MouseCursor, Point, Size, Widget,
+        layout, Background, Color, Element, Hasher, Layout, Length, MouseCursor, Point, Size,
+        Widget,
     };
     use iced_wgpu::{Defaults, Primitive, Renderer};
 
@@ -25,11 +25,7 @@ mod circle {
             Length::Shrink
         }
 
-        fn layout(
-            &self,
-            _renderer: &Renderer,
-            _limits: &layout::Limits,
-        ) -> layout::Node {
+        fn layout(&self, _renderer: &Renderer, _limits: &layout::Limits) -> layout::Node {
             layout::Node::new(Size::new(
                 f32::from(self.radius) * 2.0,
                 f32::from(self.radius) * 2.0,
@@ -70,10 +66,7 @@ mod circle {
 }
 
 use circle::Circle;
-use iced::{
-    slider, Align, Column, Container, Element, Length, Sandbox, Settings,
-    Slider, Text,
-};
+use iced::{slider, Align, Column, Container, Element, Length, Sandbox, Settings, Slider, Text};
 
 pub fn main() {
     Example::run(Settings::default())

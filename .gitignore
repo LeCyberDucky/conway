@@ -1,1 +1,4 @@
 /target
+src/bin/example.rs
+src/bin/example_preset.rs
+src/bin/example_style.rs
