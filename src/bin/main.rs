@@ -1,235 +1,162 @@
-use iced::{widget, Container, Element, Length, Sandbox, Settings};
-use rand::Rng;
-use rgb::{alt::BGRA, ComponentBytes};
-// use image;
+// TODO:
+// 1: Add Grid
+// 2: Add Speed slider
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-enum CellState {
-    Alive,
-    Dead,
+mod simulation;
+use simulation::{Cell, CellState, Position};
+mod util; // Contains channels for inter-thread communication
+
+use iced::{
+    canvas::{self, Cache, Canvas, Cursor, Frame, Geometry},
+    executor, time, Application, Command, Container, Element, Length, Point, Rectangle,
+    Settings, Size, Subscription,
+};
+
+use std::thread;
+use std::time::{Duration, Instant};
+
+struct UI {
+    backend: util::ThreadChannel<simulation::Message>,
+    cell_grid: CellGrid,
+    target_refresh_rate: u64,
 }
 
-#[derive(Debug, Copy, Clone)]
-struct Cell {
-    state: CellState,
-    size: usize,
-    color: BGRA<u8>,
-    x: usize,
-    y: usize,
+struct Controls {}
+
+// Types of messages that can be sent between UI functions
+#[derive(Debug, Clone)]
+enum Message {
+    Tick(Instant),
 }
 
-impl Cell {
-    fn new(state: CellState, size: usize, x: usize, y: usize) -> Cell {
-        let color = match state {
-            CellState::Alive => BGRA {
-                r: 255,
-                g: 0,
-                b: 128,
-                a: 255,
-            },
-            CellState::Dead => BGRA {
-                r: 255,
-                g: 255,
-                b: 255,
-                a: 255,
-            },
-        };
+impl Application for UI {
+    type Executor = executor::Default;
+    type Message = Message;
+    type Flags = ();
 
-        Cell {
-            state,
-            size,
-            color,
-            x,
-            y,
-        }
-    }
+    fn new(_flags: ()) -> (UI, Command<Self::Message>) {
+        let cell_size = 8;
+        let grid_size = 96;
+        let target_refresh_rate = 60; // Please don't set this to 0
+        let evolution_rate = 3000; // evolutions/(100s)
+        let (ui, backend) = util::ThreadChannel::new_pair();
 
-    fn set_state(&mut self, state: &CellState) {
-        self.state = *state;
-        self.color = match state {
-            CellState::Alive => BGRA {
-                r: 255,
-                g: 0,
-                b: 128,
-                a: 255,
-            },
-            CellState::Dead => BGRA {
-                r: 255,
-                g: 255,
-                b: 255,
-                a: 255,
-            },
-        };
-    }
-}
-
-pub fn main() -> iced::Result {
-    Conway::run(Settings::default())
-}
-
-struct Conway {
-    cell_size: usize, // Length/width of cell given in number of pixels
-    board_size: usize, // Length/width of board given in number of cells
-    cells: Vec<Vec<Cell>>,
-    bytes_per_pixel: usize,
-    pixel_bytes: Vec<u8>,
-}
-
-impl Sandbox for Conway {
-    type Message = ();
-
-    fn new() -> Conway {
-        let cell_size = 12;
-        let board_size = 64;
-        let bytes_per_pixel = 4; // One byte for each BGRA value
-        let pixel_bytes =
-            vec![0; board_size * cell_size * board_size * cell_size * bytes_per_pixel];
-
-        let mut cells: Vec<Vec<Cell>> = (0..board_size)
-            .map(|y| {
-                (0..board_size)
-                    .map(|x| Cell::new(CellState::Dead, cell_size, x, y))
-                    .collect()
+        thread::Builder::new()
+            .name("Game of Life Simulation".to_string())
+            .spawn(move || {
+                let mut simulation =
+                    simulation::Simulation::new(ui, grid_size, target_refresh_rate, evolution_rate);
+                simulation.run();
             })
-            .collect();
+            .unwrap(); // Not sure what to do here besides this unwrap, as I'm not the one calling this outer function
 
-        // Randomly place a number of living cells on the grid
-        let living_cell_percent = 20;
-        let mut rng = rand::thread_rng();
-        let mut live_cells: Vec<(usize, usize)> = (0..((board_size * board_size * living_cell_percent)/100))
-            .map(|_| (rng.gen_range(0..board_size), rng.gen_range(0..board_size)))
-            .collect(); // Start with ~10% random living cells
+        let ui = UI {
+            backend,
+            cell_grid: CellGrid::new(cell_size, grid_size),
+            target_refresh_rate,
+        };
 
-        live_cells.sort();
-        live_cells.dedup();
-
-        println!(
-            "{}/{} ≈ {}% living cells.",
-            live_cells.len(),
-            cells.len() * cells[0].len(),
-            (live_cells.len() as f64) / (cells.len() as f64 * cells[0].len() as f64) * 100.0
-        );
-
-        for (x, y) in live_cells {
-            cells[y][x].set_state(&CellState::Alive)
-        }
-
-
-        Conway {
-            cell_size,
-            board_size,
-            cells,
-            bytes_per_pixel,
-            pixel_bytes,
-        }
+        (ui, Command::none())
     }
 
     fn title(&self) -> String {
-        String::from("The Game of Life")
+        String::from("Conway's Game of Life")
     }
 
-    fn update(&mut self, _message: Self::Message) {
-        let transitions: Vec<Vec<(usize, usize, CellState)>> = self
-            .cells
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .filter_map(|cell| {
-                        let mut neighbor_states = vec![]; // Every cell has 8 neighbors
-                        for x_offset in -1..=1_isize {
-                            for y_offset in -1..=1_isize {
-                                let x = (cell.x as isize).rem_euclid(x_offset) as usize;
-                                let y = (cell.y as isize).rem_euclid(y_offset) as usize;
-
-                                if !(x == y && x == 0) {
-                                    neighbor_states.push(self.cells[y][x].state);
-                                }
+    fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
+        match message {
+            Message::Tick(_) => {
+                let backend_updates = self.backend.receive();
+                if !backend_updates.is_empty() {
+                    self.cell_grid.frame_content.clear();
+                }
+                for update in backend_updates {
+                    match update {
+                        simulation::Message::CellTransitions(transitions) => {
+                            for (position, state) in transitions {
+                                self.cell_grid.cells[position.y][position.x].set_state(state);
                             }
                         }
-                        let live_neighbor_count = neighbor_states
-                            .iter()
-                            .filter(|&state| *state == CellState::Alive)
-                            .count();
-
-                        let x = cell.x;
-                        let y = cell.y;
-
-                        match cell.state {
-                            CellState::Dead if live_neighbor_count == 3 => {
-                                Some((x, y, CellState::Alive))
-                            }
-                            CellState::Alive => match live_neighbor_count {
-                                0..=1 => Some((x, y, CellState::Dead)),
-                                2..=3 => None,
-                                _ => Some((x, y, CellState::Dead)),
-                            },
-                            _ => None,
-                        }
-                    })
-                    .collect()
-            })
-            .collect();
-
-        let transitions: Vec<(usize, usize, CellState)> =
-            transitions.into_iter().flatten().collect();
-
-        println!("{:#?}", transitions);
-
-        for (x, y, state) in transitions {
-            self.cells[y][x].set_state(&state);
-        }
-    }
-
-    fn view(&mut self) -> Element<Self::Message> {
-        // Consider using Piet for drawing and compare performance https://docs.rs/piet/0.3.0/piet/struct.ImageBuf.html
-        // Update the pixel bytes
-        let edge_color = BGRA {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 170,
-        };
-
-        let bytes_per_cell_edge = self.cell_size * self.bytes_per_pixel;
-        for row in self.cells.iter() {
-            for cell in row {
-                for y_offset in 0..self.cell_size {
-                    let pixels = if y_offset == 0 || y_offset == self.cell_size - 1 {
-                        vec![edge_color; self.cell_size]
-                    } else {
-                        let mut pixels = vec![cell.color; self.cell_size];
-                        pixels[0] = edge_color;
-                        pixels[self.cell_size - 1] = edge_color;
-                        pixels
-                    };
-
-                    // let pixels = vec![edge_color; self.cell_size]; // No grid edges
-                    let bytes = pixels.as_bytes();
-
-                    let y = cell.y * self.cell_size + y_offset;
-                    let start =
-                        y * self.board_size * bytes_per_cell_edge + cell.x * bytes_per_cell_edge;
-                    let end = start + bytes_per_cell_edge;
-                    self.pixel_bytes.splice(start..end, bytes.iter().cloned());
+                    }
                 }
             }
         }
 
-        let image_dimensions = (self.board_size * self.cell_size) as u32;
-        // image::save_buffer(r"C:\Users\Andy\Desktop\test.jpg", &self.pixel_bytes.clone(), image_dimensions, image_dimensions, image::ColorType::Bgra8).unwrap();
-        let img = widget::image::Handle::from_pixels(
-            image_dimensions,
-            image_dimensions,
-            self.pixel_bytes.clone(),
-        );
-        let img = widget::image::Image::new(img);
+        // Async command thingy. No touchy.
+        Command::none()
+    }
 
-        Container::new(img)
+    fn view(&mut self) -> Element<Self::Message> {
+        let canvas = Canvas::new(&self.cell_grid)
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        Container::new(canvas)
             .width(Length::Fill)
             .height(Length::Fill)
-            .padding(10)
+            .padding(20)
             .center_x()
             .center_y()
             .into()
+    }
+
+    fn subscription(&self) -> Subscription<Message> {
+        time::every(Duration::from_micros(1_000_000 / self.target_refresh_rate)).map(Message::Tick)
+    }
+}
+
+pub fn main() -> iced::Result {
+    UI::run(Settings::default())
+}
+
+struct CellGrid {
+    cell_size: usize, // Edge length of cell in pixels
+    grid_size: usize, // Edge length of grid in cells
+    cells: Vec<Vec<Cell>>,
+    frame_content: Cache,
+}
+
+impl CellGrid {
+    fn new(cell_size: usize, grid_size: usize) -> Self {
+        let cells: Vec<Vec<Cell>> = (0..grid_size)
+            .map(|y| {
+                (0..grid_size)
+                    .map(|x| Cell::new(CellState::Dead, Position { x, y }))
+                    .collect()
+            })
+            .collect();
+
+        Self {
+            cell_size,
+            grid_size,
+            cells,
+            frame_content: Cache::new(),
+        }
+    }
+}
+
+impl canvas::Program<Message> for &CellGrid {
+    fn draw(&self, bounds: Rectangle, _cursor: Cursor) -> Vec<Geometry> {
+        let frame_conent = self.frame_content.draw(bounds.size(), |frame| {
+            for row in &self.cells {
+                for cell in row {
+                    cell.draw(frame, self.cell_size);
+                }
+            }
+        });
+
+        vec![frame_conent]
+    }
+}
+
+impl Cell {
+    fn draw(&self, frame: &mut Frame, size: usize) {
+        let top_left = Point::from(self.position * size);
+        let size = size as f32;
+        let size = Size {
+            width: size,
+            height: size,
+        };
+        frame.fill_rectangle(top_left, size, self.color);
     }
 }

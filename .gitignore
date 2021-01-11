@@ -2,3 +2,6 @@
 src/bin/example.rs
 src/bin/example_preset.rs
 src/bin/example_style.rs
+src/bin/clock_example.rs
+src/bin/custom_widget_example.rs
+src/bin/examples
