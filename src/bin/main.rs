@@ -241,10 +241,15 @@ impl Controls {
                 1.0..=200.0,
                 (self.evolution_rate) as f64,
                 Message::EvolutionRateChange,
-            ))
+            )
+        .style(style::Slider))
             .push(Text::new(format!("Evolution rate: {}/s", (self.evolution_rate as f64)/10.0)).size(16));
 
-        Row::new().push(speed_controls).into()
+        Row::new()
+            .padding(10)
+            .spacing(20)
+            .align_items(Align::Center)
+            .push(speed_controls).into()
     }
 }
 
