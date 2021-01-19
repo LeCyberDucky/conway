@@ -1,10 +1,9 @@
 use crate::util;
 
-use iced::{
-    Color, Point,
-};
+use iced::Point;
 
 use rand::Rng;
+// use num_traits::Num;
 
 use std::ops::Mul;
 use std::thread;
@@ -45,36 +44,19 @@ pub enum CellState {
 #[derive(Debug)]
 pub struct Cell {
     pub position: Position, // Top left corner position
-    state: CellState,
-    pub color: Color,
+    pub state: CellState,
 }
 
 impl Cell {
     pub fn new(state: CellState, position: Position) -> Cell {
-        let color = match state {
-            CellState::Alive => Color::from_rgba8(255, 0, 128, 1_f32),
-            CellState::Dead => Color::from_rgba8(36, 36, 36, 1_f32),
-        };
-
-        Cell {
-            state,
-            color,
-            position,
-        }
-    }
-
-    pub fn set_state(&mut self, state: CellState) {
-        self.state = state;
-        self.color = match self.state {
-            CellState::Alive => Color::from_rgba8(255, 0, 128, 1_f32),
-            CellState::Dead => Color::from_rgba8(36, 36, 36, 1_f32),
-        };
+        Cell { state, position }
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
     CellTransitions(Vec<(Position, CellState)>),
+    EvolutionRateChange(u128),
 }
 
 pub struct Simulation {
@@ -104,7 +86,7 @@ impl Simulation {
             .collect();
 
         // Randomly place a number of living cells on the grid
-        let living_cell_percent = 20;
+        let living_cell_percent = 50;
         let mut rng = rand::thread_rng();
         let mut live_cells: Vec<Position> = (0..((grid_size * grid_size * living_cell_percent)
             / 100))
@@ -118,7 +100,7 @@ impl Simulation {
         live_cells.dedup();
 
         for Position { x, y } in &live_cells {
-            cell_grid[*y][*x].set_state(CellState::Alive)
+            cell_grid[*y][*x].state = CellState::Alive;
         }
 
         // Set live cells in the UI
@@ -144,8 +126,23 @@ impl Simulation {
         // Check for messages
         // Update
         loop {
+            // Check for messages
+            let ui_messages = self.ui.receive();
+            for message in ui_messages {
+                match message {
+                    Message::EvolutionRateChange(rate) => {
+                        self.evolution_rate = rate;
+                        self.evolution_count = 0;
+                        self.clock = Instant::now();
+                        self.frame_count = 0;
+                    }
+                    _ => (),
+                }
+            }
+
+            // Advance simulation
             let clock = self.clock.elapsed().as_millis();
-            if 1_000_000 * (self.evolution_count + 1) <= clock * self.evolution_rate {
+            if 10_000 * (self.evolution_count + 1) <= clock * self.evolution_rate {
                 let transitions = self.update();
                 self.ui.send(Message::CellTransitions(transitions));
                 self.evolution_count += 1;
@@ -203,7 +200,7 @@ impl Simulation {
         let transitions: Vec<(Position, CellState)> = transitions.into_iter().flatten().collect();
 
         for (Position { x, y }, state) in &transitions {
-            self.cell_grid[*y][*x].set_state(*state);
+            self.cell_grid[*y][*x].state = *state;
         }
 
         transitions
