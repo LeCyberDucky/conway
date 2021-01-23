@@ -112,7 +112,9 @@ impl Application for UI {
             .width(Length::Fill)
             .height(Length::Fill);
 
-        let controls = self.controls.view();
+        let slider_width = self.cell_grid.cell_size * self.cell_grid.grid_size;
+
+        let controls = self.controls.view(slider_width as u16);
         let content = Column::new().push(canvas).push(controls);
 
         Container::new(content)
@@ -121,6 +123,7 @@ impl Application for UI {
             .padding(20)
             .center_x()
             .center_y()
+            .style(style::Container)
             .into()
     }
 
@@ -170,15 +173,10 @@ impl canvas::Program<Message> for &CellGrid {
 
             if self.show_grid_lines {
                 for line in 0..=self.grid_size {
-                    let half_width = self.line_width / 2.0;
                     let mut vertical_top_left =
                         Point::from(Position { x: line, y: 0 } * self.cell_size);
-                    vertical_top_left.x -= half_width;
-                    vertical_top_left.y -= half_width;
                     let mut horizontal_top_left =
                         Point::from(Position { x: 0, y: line } * self.cell_size);
-                    horizontal_top_left.x -= half_width;
-                    horizontal_top_left.y -= half_width;
 
                     let size = (self.grid_size * self.cell_size) as f32 + self.line_width;
                     let vertical_size = Size {
@@ -231,25 +229,54 @@ struct Controls {
 }
 
 impl Controls {
-    fn view(&mut self) -> Element<Message> {
-        let speed_controls = Row::new()
-            .width(Length::Fill)
+    fn view(&mut self, slider_width: u16) -> Element<Message> {
+        // let speed_controls = Row::new()
+        //     .width(Length::Fill)
+        //     .align_items(Align::Center)
+        //     .spacing(10)
+        //     .push(
+        //         Slider::new(
+        //             &mut self.evolution_rate_slider,
+        //             1.0..=200.0,
+        //             (self.evolution_rate) as f64,
+        //             Message::EvolutionRateChange,
+        //         )
+        //         .style(style::Slider),
+        //     )
+        //     .push(
+        //         Text::new(format!(
+        //             "Evolution rate: {}/s",
+        //             (self.evolution_rate as f64) / 10.0
+        //         ))
+        //         .size(16),
+        //     );
+        let speed_slider = Row::new()
+            .width(Length::Units(slider_width))
             .align_items(Align::Center)
             .spacing(10)
-            .push(Slider::new(
-                &mut self.evolution_rate_slider,
-                1.0..=200.0,
-                (self.evolution_rate) as f64,
-                Message::EvolutionRateChange,
-            )
-        .style(style::Slider))
-            .push(Text::new(format!("Evolution rate: {}/s", (self.evolution_rate as f64)/10.0)).size(16));
+            .push(
+                Slider::new(
+                    &mut self.evolution_rate_slider,
+                    1.0..=200.0,
+                    (self.evolution_rate) as f64,
+                    Message::EvolutionRateChange,
+                )
+                .style(style::Slider),
+            );
+        let text = Text::new(format!(
+            "Evolution rate: {}/s",
+            (self.evolution_rate as f64) / 10.0
+        ))
+        .size(16);
 
         Row::new()
-            .padding(10)
+            .width(Length::Shrink)
+            .padding(0)
             .spacing(20)
             .align_items(Align::Center)
-            .push(speed_controls).into()
+            .push(speed_slider)
+            .push(text)
+            .into()
     }
 }
 
