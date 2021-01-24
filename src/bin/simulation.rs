@@ -56,6 +56,8 @@ impl Cell {
 pub enum Message {
     CellTransitions(Vec<(Position, CellState)>),
     EvolutionRateChange(u128),
+    TogglePlay,
+    Evolve(usize),
 }
 
 pub struct Simulation {
@@ -67,6 +69,7 @@ pub struct Simulation {
     clock: Instant,
     frame_count: u128,
     target_refresh_rate: u128,
+    is_paused: bool,
 }
 
 impl Simulation {
@@ -75,6 +78,7 @@ impl Simulation {
         grid_size: usize,
         target_refresh_rate: u64,
         evolution_rate: u128,
+        is_paused: bool,
     ) -> Simulation {
         let mut cell_grid: Vec<Vec<Cell>> = (0..grid_size)
             .map(|y| {
@@ -118,6 +122,7 @@ impl Simulation {
             clock: Instant::now(),
             target_refresh_rate: target_refresh_rate.into(),
             frame_count: 0,
+            is_paused,
         }
     }
 
@@ -135,6 +140,13 @@ impl Simulation {
                         self.clock = Instant::now();
                         self.frame_count = 0;
                     }
+                    Message::TogglePlay => self.is_paused = !self.is_paused,
+                    Message::Evolve(generations) => {
+                        for _i in 0..generations {
+                            let transitions = self.update();
+                            self.ui.send(Message::CellTransitions(transitions));
+                        }
+                    }
                     _ => (),
                 }
             }
@@ -142,8 +154,10 @@ impl Simulation {
             // Advance simulation
             let clock = self.clock.elapsed().as_millis();
             if 10_000 * (self.evolution_count + 1) <= clock * self.evolution_rate {
-                let transitions = self.update();
-                self.ui.send(Message::CellTransitions(transitions));
+                if !self.is_paused {
+                    let transitions = self.update();
+                    self.ui.send(Message::CellTransitions(transitions));
+                }
                 self.evolution_count += 1;
             }
             self.sleep_remaining_frame();

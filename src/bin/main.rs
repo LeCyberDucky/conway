@@ -3,7 +3,7 @@ use simulation::{Cell, CellState, Position};
 mod style;
 mod util; // Contains channels for inter-thread communication
 
-use iced::{Align, Application, Column, Command, Container, Element, HorizontalAlignment, Length, Point, Rectangle, Row, Settings, Size, Space, Subscription, Text, canvas::{self, Cache, Canvas, Cursor, Frame, Geometry}, executor, slider::{self, Slider}, time};
+use iced::{Align, Application, Column, Command, Container, Element, HorizontalAlignment, Length, Point, Rectangle, Row, Settings, Size, Space, Subscription, Text, button::{self, Button}, canvas::{self, Cache, Canvas, Cursor, Frame, Geometry}, executor, slider::{self, Slider}, text_input::{self, TextInput}, time};
 
 use std::thread;
 use std::time::{Duration, Instant};
@@ -25,6 +25,9 @@ struct UI {
 enum Message {
     Tick(Instant),
     EvolutionRateChange(f64),
+    TogglePlay,
+    Evolve(usize),
+    SetEvolveCount(usize, String),
 }
 
 impl Application for UI {
@@ -39,13 +42,21 @@ impl Application for UI {
         let evolution_rate = 25; // evolutions/(100s)
         let show_grid_lines = true;
         let grid_line_width = 2.0;
+        let is_paused = true;
+        let evolve_count = 1;
         let controls = Controls {
             evolution_rate_slider: slider::State::new(),
             evolution_rate,
             show_grid_lines: true,
+            is_paused,
+            toggle_play_button: button::State::new(),
+            evolve_button: button::State::new(),
+            evolve_count,
+            evolve_input_field: text_input::State::new(),
+            evolve_input_text: evolve_count.to_string(),
         };
         let statistics = Statistics {
-            cell_count: grid_size*grid_size,
+            cell_count: grid_size * grid_size,
             live_cell_count: 0,
             generation: 0,
         };
@@ -54,8 +65,13 @@ impl Application for UI {
         thread::Builder::new()
             .name("Game of Life Simulation".to_string())
             .spawn(move || {
-                let mut simulation =
-                    simulation::Simulation::new(ui, grid_size, target_refresh_rate, evolution_rate);
+                let mut simulation = simulation::Simulation::new(
+                    ui,
+                    grid_size,
+                    target_refresh_rate,
+                    evolution_rate,
+                    is_paused,
+                );
                 simulation.run();
             })
             .unwrap(); // Not sure what to do here besides this unwrap, as I'm not the one calling this outer function
@@ -92,18 +108,28 @@ impl Application for UI {
                                     CellState::Alive => self.statistics.live_cell_count += 1,
                                     CellState::Dead => self.statistics.live_cell_count -= 1,
                                 }
-
                             }
                             self.statistics.generation += 1;
                         }
                         _ => (),
                     }
                 }
-            }
+            },
             Message::EvolutionRateChange(rate) => {
                 self.controls.evolution_rate = rate as u128;
                 self.backend
                     .send(simulation::Message::EvolutionRateChange(rate as u128));
+            },
+            Message::TogglePlay => {
+                self.controls.is_paused = !self.controls.is_paused;
+                self.backend.send(simulation::Message::TogglePlay);
+            },
+            Message::Evolve(generations) => {
+                self.backend.send(simulation::Message::Evolve(generations));
+            },
+            Message::SetEvolveCount(count, text) => {
+                self.controls.evolve_count = count;
+                self.controls.evolve_input_text = text;
             }
         }
 
@@ -117,7 +143,7 @@ impl Application for UI {
         let canvas = Canvas::new(&self.cell_grid)
             .width(Length::Units(canvas_width as u16))
             .height(Length::Units(canvas_width as u16));
-            
+
         let statistics = self.statistics.view();
 
         let content = Row::new().spacing(10).push(canvas).push(statistics);
@@ -231,8 +257,12 @@ struct Controls {
     evolution_rate_slider: slider::State,
     evolution_rate: u128,
     show_grid_lines: bool,
-    // Pause button
-    // Skip button
+    is_paused: bool,
+    toggle_play_button: button::State,
+    evolve_button: button::State,
+    evolve_input_field: text_input::State,
+    evolve_input_text: String,
+    evolve_count: usize,
     // Add x random cells
     // Toggle grid button
     // Click to toggle state of cell
@@ -240,42 +270,87 @@ struct Controls {
 
 impl Controls {
     fn view(&mut self, slider_width: u16) -> (Element<Message>, Element<Message>) {
-        let speed_slider = Row::new()
-            .align_items(Align::Center)
-            // .spacing(10)
-            .push(
-                Slider::new(
-                    &mut self.evolution_rate_slider,
-                    1.0..=200.0,
-                    (self.evolution_rate) as f64,
-                    Message::EvolutionRateChange,
-                )
-                .style(style::Slider),
-            );
+        let speed_slider = Slider::new(
+            &mut self.evolution_rate_slider,
+            1.0..=200.0,
+            (self.evolution_rate) as f64,
+            Message::EvolutionRateChange,
+        )
+        .style(style::Slider);
+
+        let play_button = Button::new(
+            &mut self.toggle_play_button,
+            match self.is_paused {
+                false => Text::new(format!("Pause")).size(18),
+                true => Text::new(format!("Play")).size(18),
+            },
+        )
+        .on_press(Message::TogglePlay).style(style::Button);
+
+        let evolve_button = Button::new(
+            &mut self.evolve_button,
+            Text::new(format!("Evolve by:")).size(18),
+        )
+        .on_press(Message::Evolve(self.evolve_count)).style(style::Button);
+
+        let evolve_count = self.evolve_count;
+
+        let evolve_input_field = TextInput::new(
+            &mut self.evolve_input_field,
+            "Evolve X generations",
+            &self.evolve_input_text,
+            (move |input| Controls::input_evolve_count(input, evolve_count)),
+        ).padding(5).style(style::InputField);
 
         let evolution_rate = Text::new(format!(
             "Evolutions/second: {}",
-            (self.evolution_rate as f64) / 10.0
+            if self.is_paused {
+                0.0
+            } else {
+                (self.evolution_rate as f64) / 10.0
+            }
         ))
         .size(18);
-        let evolution_rate = Container::new(evolution_rate).padding(5).style(style::TextSnippet);
+        let evolution_rate = Container::new(evolution_rate)
+            .padding(5)
+            .style(style::TextSnippet);
 
-        let evolution_rate = Row::new().width(Length::Units(slider_width)).push(Space::with_width(Length::Fill)).push(evolution_rate);
+        let evolution_controls = Row::new()
+            .width(Length::Units(slider_width))
+            .align_items(Align::Center)
+            .spacing(5)
+            .push(play_button)
+            .push(evolve_button)
+            .push(evolve_input_field)
+            .push(Space::with_width(Length::Fill))
+            .push(evolution_rate);
 
-        let bottom = Column::new().width(Length::Units(slider_width)).spacing(5).push(speed_slider).push(evolution_rate).into();
+        let bottom = Column::new()
+            .width(Length::Units(slider_width))
+            .spacing(5)
+            .push(speed_slider)
+            .push(evolution_controls)
+            .into();
 
         let side = Column::new().into();
-        
+
         (bottom, side)
     }
-}
 
+    fn input_evolve_count(input: String, current_number: usize) -> Message {
+        let count = input.parse::<usize>();
+        match count {
+            Ok(number) => Message::SetEvolveCount(number, number.to_string()),
+            Err(_) => Message::SetEvolveCount(0, input),
+        }
+    }
+}
 
 struct Statistics {
     cell_count: usize,
     live_cell_count: usize,
     generation: usize,
-// FPS
+    // FPS
 }
 
 impl Statistics {
@@ -283,17 +358,23 @@ impl Statistics {
         let total_cells = self.cell_count;
         let live_cells = self.live_cell_count;
         let dead_cells = total_cells - live_cells;
-        let live_cell_percent = (live_cells as f64)/(total_cells as f64) * 100.0;
-        let dead_cell_percent = (dead_cells as f64)/(total_cells as f64) * 100.0;
+        let live_cell_percent = (live_cells as f64) / (total_cells as f64) * 100.0;
+        let dead_cell_percent = (dead_cells as f64) / (total_cells as f64) * 100.0;
 
-        let statistics = Text::new(
-            format!(
-                "Generation: {}\n\nTotal cells: {}\nLive cells: {} ≈ {:.2}%\nDead cells: {} ≈ {:.2}%",
-                self.generation, total_cells, live_cells, live_cell_percent, dead_cells, dead_cell_percent
-            )
-        )
+        let statistics = Text::new(format!(
+            "Generation: {}\n\nTotal cells: {}\nLive cells: {} ≈ {:.2}%\nDead cells: {} ≈ {:.2}%",
+            self.generation,
+            total_cells,
+            live_cells,
+            live_cell_percent,
+            dead_cells,
+            dead_cell_percent
+        ))
         .size(18);
 
-        Container::new(statistics).padding(5).style(style::TextSnippet).into()
+        Container::new(statistics)
+            .padding(5)
+            .style(style::TextSnippet)
+            .into()
     }
 }
