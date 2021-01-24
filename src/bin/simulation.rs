@@ -3,7 +3,6 @@ use crate::util;
 use iced::Point;
 
 use rand::Rng;
-// use num_traits::Num;
 
 use std::ops::Mul;
 use std::thread;

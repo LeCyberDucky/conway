@@ -112,7 +112,8 @@ impl Application for UI {
             .width(Length::Fill)
             .height(Length::Fill);
 
-        let slider_width = self.cell_grid.cell_size * self.cell_grid.grid_size;
+        let slider_width = self.cell_grid.cell_size * self.cell_grid.grid_size
+            + self.cell_grid.line_width as usize;
 
         let controls = self.controls.view(slider_width as u16);
         let content = Column::new().push(canvas).push(controls);
@@ -167,26 +168,27 @@ impl canvas::Program<Message> for &CellGrid {
         let frame_conent = self.frame_content.draw(bounds.size(), |frame| {
             for row in &self.cells {
                 for cell in row {
-                    cell.draw(frame, self.cell_size);
+                    cell.draw(frame, self.cell_size, self.line_width / 2.0);
                 }
             }
 
             if self.show_grid_lines {
-                for line in 0..=self.grid_size {
-                    let mut vertical_top_left =
-                        Point::from(Position { x: line, y: 0 } * self.cell_size);
-                    let mut horizontal_top_left =
-                        Point::from(Position { x: 0, y: line } * self.cell_size);
+                let line_size = (self.grid_size * self.cell_size) as f32 + self.line_width;
 
-                    let size = (self.grid_size * self.cell_size) as f32 + self.line_width;
-                    let vertical_size = Size {
-                        width: self.line_width,
-                        height: size,
-                    };
-                    let horizontal_size = Size {
-                        width: size,
-                        height: self.line_width,
-                    };
+                let vertical_size = Size {
+                    width: self.line_width,
+                    height: line_size,
+                };
+                let horizontal_size = Size {
+                    width: line_size,
+                    height: self.line_width,
+                };
+
+                for line in 0..=self.grid_size {
+                    let vertical_top_left =
+                        Point::from(Position { x: line, y: 0 } * self.cell_size);
+                    let horizontal_top_left =
+                        Point::from(Position { x: 0, y: line } * self.cell_size);
 
                     frame.fill_rectangle(vertical_top_left, vertical_size, style::GRID_LINE);
                     frame.fill_rectangle(horizontal_top_left, horizontal_size, style::GRID_LINE);
@@ -199,8 +201,10 @@ impl canvas::Program<Message> for &CellGrid {
 }
 
 impl Cell {
-    fn draw(&self, frame: &mut Frame, size: usize) {
-        let top_left = Point::from(self.position * size);
+    fn draw(&self, frame: &mut Frame, size: usize, offset: f32) {
+        let mut top_left = Point::from(self.position * size);
+        top_left.x += offset;
+        top_left.y += offset;
         let size = size as f32;
         let size = Size {
             width: size,
@@ -230,26 +234,6 @@ struct Controls {
 
 impl Controls {
     fn view(&mut self, slider_width: u16) -> Element<Message> {
-        // let speed_controls = Row::new()
-        //     .width(Length::Fill)
-        //     .align_items(Align::Center)
-        //     .spacing(10)
-        //     .push(
-        //         Slider::new(
-        //             &mut self.evolution_rate_slider,
-        //             1.0..=200.0,
-        //             (self.evolution_rate) as f64,
-        //             Message::EvolutionRateChange,
-        //         )
-        //         .style(style::Slider),
-        //     )
-        //     .push(
-        //         Text::new(format!(
-        //             "Evolution rate: {}/s",
-        //             (self.evolution_rate as f64) / 10.0
-        //         ))
-        //         .size(16),
-        //     );
         let speed_slider = Row::new()
             .width(Length::Units(slider_width))
             .align_items(Align::Center)
@@ -270,7 +254,6 @@ impl Controls {
         .size(16);
 
         Row::new()
-            .width(Length::Shrink)
             .padding(0)
             .spacing(20)
             .align_items(Align::Center)
