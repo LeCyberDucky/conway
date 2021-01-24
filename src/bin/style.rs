@@ -1,4 +1,4 @@
-use iced::{Background, Color, button, container, slider, text_input};
+use iced::{button, container, slider, text_input, Background, Color};
 
 #[allow(clippy::eq_op)]
 
@@ -21,7 +21,7 @@ pub const BORDER_RADIUS: f32 = 5.0;
 
 pub struct InputField;
 
-impl  text_input::StyleSheet for InputField {
+impl text_input::StyleSheet for InputField {
     fn active(&self) -> text_input::Style {
         text_input::Style {
             background: Background::Color(ACCENT),
@@ -34,10 +34,7 @@ impl  text_input::StyleSheet for InputField {
         text_input::Style {
             border_width: BORDER_WIDTH,
             border_color: BORDER,
-            background: Background::Color(Color {
-                a: 0.5,
-                ..ACCENT
-            }),
+            background: Background::Color(Color { a: 0.5, ..ACCENT }),
             ..self.active()
         }
     }
@@ -54,10 +51,7 @@ impl  text_input::StyleSheet for InputField {
     }
 
     fn selection_color(&self) -> Color {
-        Color {
-            a: 0.3,
-            ..ACTIVE
-        }
+        Color { a: 0.3, ..ACTIVE }
     }
 }
 
@@ -75,10 +69,7 @@ impl button::StyleSheet for Button {
 
     fn hovered(&self) -> button::Style {
         button::Style {
-            background: Some(Background::Color(Color {
-                a: 0.5,
-                ..ACCENT
-            })),
+            background: Some(Background::Color(Color { a: 0.5, ..ACCENT })),
             text_color: TEXT,
             border_color: BORDER,
             border_width: BORDER_WIDTH,
@@ -88,7 +79,7 @@ impl button::StyleSheet for Button {
 
     fn pressed(&self) -> button::Style {
         button::Style {
-            border_width: BORDER_WIDTH/2.0,
+            border_width: BORDER_WIDTH / 2.0,
             background: Some(Background::Color(ACTIVE)),
             ..self.hovered()
         }

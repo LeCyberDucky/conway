@@ -1,14 +1,22 @@
 // Feature ideas:
 // - Button to add x random live cells
 // - Fields to input cell and grid size
-// - Click cells to toggle their state 
+// - Click cells to toggle their state
 
 mod simulation;
 use simulation::{Cell, CellState, Position};
 mod style;
 mod util; // Contains channels for inter-thread communication
 
-use iced::{Align, Application, Column, Command, Container, Element, HorizontalAlignment, Length, Point, Rectangle, Row, Settings, Size, Space, Subscription, Text, button::{self, Button}, canvas::{self, Cache, Canvas, Cursor, Frame, Geometry}, executor, slider::{self, Slider}, text_input::{self, TextInput}, time};
+use iced::{
+    button::{self, Button},
+    canvas::{self, Cache, Canvas, Cursor, Frame, Geometry},
+    executor,
+    slider::{self, Slider},
+    text_input::{self, TextInput},
+    time, Align, Application, Column, Command, Container, Element, Length, Point, Rectangle, Row,
+    Settings, Size, Space, Subscription, Text,
+};
 
 use std::thread;
 use std::time::{Duration, Instant};
@@ -119,19 +127,19 @@ impl Application for UI {
                         _ => (),
                     }
                 }
-            },
+            }
             Message::EvolutionRateChange(rate) => {
                 self.controls.evolution_rate = rate as u128;
                 self.backend
                     .send(simulation::Message::EvolutionRateChange(rate as u128));
-            },
+            }
             Message::TogglePlay => {
                 self.controls.is_paused = !self.controls.is_paused;
                 self.backend.send(simulation::Message::TogglePlay);
-            },
+            }
             Message::Evolve(generations) => {
                 self.backend.send(simulation::Message::Evolve(generations));
-            },
+            }
             Message::SetEvolveCount(count, text) => {
                 self.controls.evolve_count = count;
                 self.controls.evolve_input_text = text;
@@ -286,26 +294,28 @@ impl Controls {
         let play_button = Button::new(
             &mut self.toggle_play_button,
             match self.is_paused {
-                false => Text::new(format!("Pause")).size(18),
-                true => Text::new(format!("Play")).size(18),
+                false => Text::new("Pause".to_string()).size(18),
+                true => Text::new("Play".to_string()).size(18),
             },
         )
-        .on_press(Message::TogglePlay).style(style::Button);
+        .on_press(Message::TogglePlay)
+        .style(style::Button);
 
         let evolve_button = Button::new(
             &mut self.evolve_button,
             Text::new(format!("Evolve by:")).size(18),
         )
-        .on_press(Message::Evolve(self.evolve_count)).style(style::Button);
-
-        let evolve_count = self.evolve_count;
+        .on_press(Message::Evolve(self.evolve_count))
+        .style(style::Button);
 
         let evolve_input_field = TextInput::new(
             &mut self.evolve_input_field,
             "Evolve X generations",
             &self.evolve_input_text,
-            (move |input| Controls::input_evolve_count(input, evolve_count)),
-        ).padding(5).style(style::InputField);
+            move |input| Controls::input_evolve_count(input),
+        )
+        .padding(5)
+        .style(style::InputField);
 
         let evolution_rate = Text::new(format!(
             "Evolutions/second: {}",
@@ -342,7 +352,7 @@ impl Controls {
         (bottom, side)
     }
 
-    fn input_evolve_count(input: String, current_number: usize) -> Message {
+    fn input_evolve_count(input: String) -> Message {
         let count = input.parse::<usize>();
         match count {
             Ok(number) => Message::SetEvolveCount(number, number.to_string()),
