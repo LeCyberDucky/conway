@@ -26,8 +26,6 @@ impl  text_input::StyleSheet for InputField {
         text_input::Style {
             background: Background::Color(ACCENT),
             border_radius: BORDER_RADIUS,
-            // border_width: BORDER_WIDTH,
-            // border_color: BORDER,
             ..text_input::Style::default()
         }
     }

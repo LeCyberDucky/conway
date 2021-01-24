@@ -1,3 +1,8 @@
+// Feature ideas:
+// - Button to add x random live cells
+// - Fields to input cell and grid size
+// - Click cells to toggle their state 
+
 mod simulation;
 use simulation::{Cell, CellState, Position};
 mod style;
