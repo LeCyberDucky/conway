@@ -1,19 +1,9 @@
-// TODO:
-// 1: Add Grid
-// 2: Add Speed slider
-
 mod simulation;
 use simulation::{Cell, CellState, Position};
 mod style;
 mod util; // Contains channels for inter-thread communication
 
-use iced::{
-    canvas::{self, Cache, Canvas, Cursor, Frame, Geometry},
-    executor,
-    slider::{self, Slider},
-    time, Align, Application, Column, Command, Container, Element, Length, Point, Rectangle, Row,
-    Settings, Size, Subscription, Text,
-};
+use iced::{Align, Application, Column, Command, Container, Element, HorizontalAlignment, Length, Point, Rectangle, Row, Settings, Size, Space, Subscription, Text, canvas::{self, Cache, Canvas, Cursor, Frame, Geometry}, executor, slider::{self, Slider}, time};
 
 use std::thread;
 use std::time::{Duration, Instant};
@@ -27,6 +17,7 @@ struct UI {
     cell_grid: CellGrid,
     target_refresh_rate: u64,
     controls: Controls,
+    statistics: Statistics,
 }
 
 // Types of messages that can be sent between UI functions
@@ -53,6 +44,11 @@ impl Application for UI {
             evolution_rate,
             show_grid_lines: true,
         };
+        let statistics = Statistics {
+            cell_count: grid_size*grid_size,
+            live_cell_count: 0,
+            generation: 0,
+        };
         let (ui, backend) = util::ThreadChannel::new_pair();
 
         thread::Builder::new()
@@ -69,6 +65,7 @@ impl Application for UI {
             cell_grid: CellGrid::new(cell_size, grid_size, show_grid_lines, grid_line_width),
             target_refresh_rate,
             controls,
+            statistics,
         };
 
         (ui, Command::none())
@@ -90,7 +87,14 @@ impl Application for UI {
                         simulation::Message::CellTransitions(transitions) => {
                             for (position, state) in transitions {
                                 self.cell_grid.cells[position.y][position.x].state = state;
+
+                                match state {
+                                    CellState::Alive => self.statistics.live_cell_count += 1,
+                                    CellState::Dead => self.statistics.live_cell_count -= 1,
+                                }
+
                             }
+                            self.statistics.generation += 1;
                         }
                         _ => (),
                     }
@@ -108,15 +112,17 @@ impl Application for UI {
     }
 
     fn view(&mut self) -> Element<Self::Message> {
-        let canvas = Canvas::new(&self.cell_grid)
-            .width(Length::Fill)
-            .height(Length::Fill);
-
-        let slider_width = self.cell_grid.cell_size * self.cell_grid.grid_size
+        let canvas_width = self.cell_grid.cell_size * self.cell_grid.grid_size
             + self.cell_grid.line_width as usize;
+        let canvas = Canvas::new(&self.cell_grid)
+            .width(Length::Units(canvas_width as u16))
+            .height(Length::Units(canvas_width as u16));
+            
+        let statistics = self.statistics.view();
 
-        let controls = self.controls.view(slider_width as u16);
-        let content = Column::new().push(canvas).push(controls);
+        let content = Row::new().spacing(10).push(canvas).push(statistics);
+        let (bottom_controls, right_controls) = self.controls.view(canvas_width as u16);
+        let content = Column::new().push(content).push(bottom_controls);
 
         Container::new(content)
             .width(Length::Fill)
@@ -229,15 +235,14 @@ struct Controls {
     // Skip button
     // Add x random cells
     // Toggle grid button
-    // Evolution rate slider
+    // Click to toggle state of cell
 }
 
 impl Controls {
-    fn view(&mut self, slider_width: u16) -> Element<Message> {
+    fn view(&mut self, slider_width: u16) -> (Element<Message>, Element<Message>) {
         let speed_slider = Row::new()
-            .width(Length::Units(slider_width))
             .align_items(Align::Center)
-            .spacing(10)
+            // .spacing(10)
             .push(
                 Slider::new(
                     &mut self.evolution_rate_slider,
@@ -247,26 +252,48 @@ impl Controls {
                 )
                 .style(style::Slider),
             );
-        let text = Text::new(format!(
+
+        let evolution_rate = Text::new(format!(
             "Evolutions/second: {}",
             (self.evolution_rate as f64) / 10.0
         ))
-        .size(16);
+        .size(18);
+        let evolution_rate = Container::new(evolution_rate).padding(5).style(style::TextSnippet);
 
-        let text = Container::new(text).padding(5).style(style::TextSnippet);
+        let evolution_rate = Row::new().width(Length::Units(slider_width)).push(Space::with_width(Length::Fill)).push(evolution_rate);
 
-        Row::new()
-            .padding(0)
-            .spacing(20)
-            .align_items(Align::Center)
-            .push(speed_slider)
-            .push(text)
-            .into()
+        let bottom = Column::new().width(Length::Units(slider_width)).spacing(5).push(speed_slider).push(evolution_rate).into();
+
+        let side = Column::new().into();
+        
+        (bottom, side)
     }
 }
 
+
 struct Statistics {
-    // FPS
-// Cell count
-// Evolution generation
+    cell_count: usize,
+    live_cell_count: usize,
+    generation: usize,
+// FPS
+}
+
+impl Statistics {
+    fn view(&mut self) -> Element<Message> {
+        let total_cells = self.cell_count;
+        let live_cells = self.live_cell_count;
+        let dead_cells = total_cells - live_cells;
+        let live_cell_percent = (live_cells as f64)/(total_cells as f64) * 100.0;
+        let dead_cell_percent = (dead_cells as f64)/(total_cells as f64) * 100.0;
+
+        let statistics = Text::new(
+            format!(
+                "Generation: {}\n\nTotal cells: {}\nLive cells: {} ≈ {:.2}%\nDead cells: {} ≈ {:.2}%",
+                self.generation, total_cells, live_cells, live_cell_percent, dead_cells, dead_cell_percent
+            )
+        )
+        .size(18);
+
+        Container::new(statistics).padding(5).style(style::TextSnippet).into()
+    }
 }
