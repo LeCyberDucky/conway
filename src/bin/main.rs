@@ -121,7 +121,7 @@ impl Application for UI {
         Container::new(content)
             .width(Length::Fill)
             .height(Length::Fill)
-            .padding(20)
+            .padding(10)
             .center_x()
             .center_y()
             .style(style::Container)
@@ -248,10 +248,12 @@ impl Controls {
                 .style(style::Slider),
             );
         let text = Text::new(format!(
-            "Evolution rate: {}/s",
+            "Evolutions/second: {}",
             (self.evolution_rate as f64) / 10.0
         ))
         .size(16);
+
+        let text = Container::new(text).padding(5).style(style::TextSnippet);
 
         Row::new()
             .padding(0)

@@ -25,6 +25,20 @@ impl container::StyleSheet for Container {
     }
 }
 
+pub struct TextSnippet;
+
+impl container::StyleSheet for TextSnippet {
+    fn style(&self) -> container::Style {
+        container::Style {
+            background: Some(Background::Color(ACCENT)),
+            text_color: Some(Color::WHITE),
+            border_radius: 5.0,
+            // border_width: 2.0,
+            ..container::Style::default()
+        }
+    }
+}
+
 pub struct Slider;
 
 impl slider::StyleSheet for Slider {
